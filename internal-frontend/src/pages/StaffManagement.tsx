@@ -50,6 +50,17 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('authToken');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default function StaffManagement() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState<boolean>(true);

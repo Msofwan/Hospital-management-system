@@ -40,6 +40,27 @@ interface Bed {
 
 const API_BASE_URL = 'http://localhost:8000';
 
+const apiClient = axios.create({ baseURL: API_BASE_URL });
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('authToken');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default function BedManagement() {
   const [beds, setBeds] = useState<Bed[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -53,7 +74,7 @@ export default function BedManagement() {
   const fetchBeds = async () => {
     try {
       setLoading(true);
-      const response = await axios.get<Bed[]>(`${API_BASE_URL}/beds/`);
+      const response = await apiClient.get<Bed[]>(`/beds/`);
       setBeds(response.data);
     } catch (err) {
       setError('Failed to fetch beds.');
@@ -65,7 +86,7 @@ export default function BedManagement() {
 
   const fetchPatients = async () => {
     try {
-      const response = await axios.get<Patient[]>(`${API_BASE_URL}/patients/`);
+      const response = await apiClient.get<Patient[]>(`/patients/`);
       // Filter out patients who are already in a bed
       const assignedPatientIds = beds.map(b => b.patient_id).filter(id => id !== null);
       const unassignedPatients = response.data.filter(p => !assignedPatientIds.includes(p.id));
@@ -87,7 +108,7 @@ export default function BedManagement() {
 
   const handleAddBed = async (bedData: { room_number: string; bed_number: string }) => {
     try {
-      await axios.post(`${API_BASE_URL}/beds/`, bedData);
+      await apiClient.post(`/beds/`, bedData);
       fetchBeds();
       setIsAddBedDialogOpen(false);
     } catch (err) {
@@ -98,7 +119,7 @@ export default function BedManagement() {
   const handleAssignPatient = async () => {
     if (!selectedBed || !selectedPatientId) return;
     try {
-      await axios.put(`${API_BASE_URL}/beds/${selectedBed.id}`, {
+      await apiClient.put(`/beds/${selectedBed.id}`, {
         is_occupied: true,
         patient_id: selectedPatientId,
       });
@@ -114,7 +135,7 @@ export default function BedManagement() {
   const handleDischarge = async (bed: Bed) => {
     if (!bed.patient_id) return;
     try {
-      await axios.put(`${API_BASE_URL}/beds/${bed.id}`, {
+      await apiClient.put(`/beds/${bed.id}`, {
         is_occupied: false,
         patient_id: null,
       });

@@ -9,6 +9,10 @@ class RoleBase(BaseModel):
 class RoleCreate(RoleBase):
     pass
 
+# Schema for updating an existing role
+class RoleUpdate(RoleBase):
+    pass
+
 # Schema for reading role data from the API
 class Role(RoleBase):
     id: int

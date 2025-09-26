@@ -54,10 +54,31 @@ export default function Appointments() {
 
   const API_BASE_URL = 'http://localhost:8000'; // Your FastAPI backend URL
 
+const apiClient = axios.create({ baseURL: API_BASE_URL });
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('authToken');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const response = await axios.get<Appointment[]>(`${API_BASE_URL}/appointments/`);
+      const response = await apiClient.get<Appointment[]>(`/appointments/`);
       setAppointments(response.data);
     } catch (err) {
       setError('Failed to fetch appointments.');
@@ -73,7 +94,7 @@ export default function Appointments() {
 
   const handleAddAppointment = async (newAppointmentData: Omit<Appointment, 'id' | 'patient'>) => {
     try {
-      await axios.post(`${API_BASE_URL}/appointments/`, newAppointmentData);
+      await apiClient.post(`/appointments/`, newAppointmentData);
       fetchAppointments(); // Refresh the list
     } catch (err) {
       setError('Failed to add appointment.');
@@ -84,7 +105,7 @@ export default function Appointments() {
   const handleEditAppointment = async (updatedAppointmentData: Omit<Appointment, 'patient'>) => {
     if (!currentAppointment) return;
     try {
-      await axios.put(`${API_BASE_URL}/appointments/${currentAppointment.id}`, updatedAppointmentData);
+      await apiClient.put(`/appointments/${currentAppointment.id}`, updatedAppointmentData);
       fetchAppointments(); // Refresh the list
     } catch (err) {
       setError('Failed to update appointment.');
@@ -95,7 +116,7 @@ export default function Appointments() {
   const handleDeleteAppointment = async () => {
     if (!currentAppointment) return;
     try {
-      await axios.delete(`${API_BASE_URL}/appointments/${currentAppointment.id}`);
+      await apiClient.delete(`/appointments/${currentAppointment.id}`);
       fetchAppointments(); // Refresh the list
     } catch (err) {
       setError('Failed to delete appointment.');

@@ -4,6 +4,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddPatientDialog from '../components/AddPatientDialog';
 import EditPatientDialog from '../components/EditPatientDialog';
 import ConfirmationDialog from '../components/ConfirmationDialog';
+import axios from 'axios';
 
 interface Patient {
   id: number;
@@ -14,6 +15,29 @@ interface Patient {
   email: string;
 }
 
+const API_BASE_URL = 'http://localhost:8000';
+
+const apiClient = axios.create({ baseURL: API_BASE_URL });
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('authToken');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default function PatientManagement() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -22,61 +46,40 @@ export default function PatientManagement() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedPatient, setSelectedPatient] = useState<null | Patient>(null);
 
-  const fetchPatients = () => {
-    const token = localStorage.getItem('token'); // Get token from local storage
-    fetch('http://127.0.0.1:8000/patients/', {
-      headers: {
-        'Authorization': `Bearer ${token}` // Add authorization header
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(data => setPatients(data))
-      .catch(error => {
-        console.error('There has been a problem with your fetch operation:', error);
-        // If the API fails, set patients to an empty array to prevent crash
-        setPatients([]); 
-      });
+  const fetchPatients = async () => {
+    try {
+      const response = await apiClient.get('/patients/');
+      setPatients(response.data);
+    } catch (error) {
+      console.error('There has been a problem with your fetch operation:', error);
+      setPatients([]);
+    }
   };
 
   useEffect(() => {
     fetchPatients();
   }, []);
 
-  const handleAddPatient = (patient: Omit<Patient, 'id'>) => {
-    fetch('http://127.0.0.1:8000/patients/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(patient),
-    })
-    .then(response => response.json())
-    .then(() => {
+  const handleAddPatient = async (patient: Omit<Patient, 'id'>) => {
+    try {
+      await apiClient.post('/patients/', patient);
       setAddDialogOpen(false);
       fetchPatients();
-    });
+    } catch (error) {
+      console.error('There has been a problem with your fetch operation:', error);
+    }
   };
 
-  const handleEditPatient = (patient: Omit<Patient, 'id'>) => {
+  const handleEditPatient = async (patient: Omit<Patient, 'id'>) => {
     if (selectedPatient) {
-      fetch(`http://127.0.0.1:8000/patients/${selectedPatient.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patient),
-      })
-      .then(response => response.json())
-      .then(() => {
+      try {
+        await apiClient.put(`/patients/${selectedPatient.id}`, patient);
         setEditDialogOpen(false);
         setSelectedPatient(null);
         fetchPatients();
-      });
+      } catch (error) {
+        console.error('There has been a problem with your fetch operation:', error);
+      }
     }
   };
 
@@ -99,16 +102,16 @@ export default function PatientManagement() {
     setConfirmDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (selectedPatient) {
-      fetch(`http://127.0.0.1:8000/patients/${selectedPatient.id}`, {
-        method: 'DELETE',
-      })
-      .then(() => {
+      try {
+        await apiClient.delete(`/patients/${selectedPatient.id}`);
         setConfirmDialogOpen(false);
         setSelectedPatient(null);
         fetchPatients();
-      });
+      } catch (error) {
+        console.error('There has been a problem with your fetch operation:', error);
+      }
     }
   };
 

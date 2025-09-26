@@ -5,7 +5,7 @@ from .schemas.patient import PatientCreate
 from .schemas.appointment import AppointmentCreate
 from .schemas.bed import BedCreate, BedUpdate
 from .schemas.staff import StaffCreate
-from .schemas.role import RoleCreate
+from .schemas.role import RoleCreate, RoleUpdate
 from .schemas.invoice import InvoiceCreate, InvoiceUpdate
 from .schemas.medicine import MedicineCreate, MedicineUpdate, MedicineRestock
 from .schemas.dispensation import DispensationCreate
@@ -112,6 +112,29 @@ def create_role(db: Session, role: RoleCreate):
     db.add(db_role)
     db.commit()
     db.refresh(db_role)
+    return db_role
+
+def get_role(db: Session, role_id: int):
+    return db.query(models.role.Role).filter(models.role.Role.id == role_id).first()
+
+def get_roles(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.role.Role).offset(skip).limit(limit).all()
+
+def update_role(db: Session, role_id: int, role: RoleUpdate):
+    db_role = get_role(db, role_id)
+    if db_role:
+        update_data = role.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_role, key, value)
+        db.commit()
+        db.refresh(db_role)
+    return db_role
+
+def delete_role(db: Session, role_id: int):
+    db_role = get_role(db, role_id)
+    if db_role:
+        db.delete(db_role)
+        db.commit()
     return db_role
 
 # Staff CRUD (Updated)
