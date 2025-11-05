@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 # Base schema for role data
 class RoleBase(BaseModel):
     name: str

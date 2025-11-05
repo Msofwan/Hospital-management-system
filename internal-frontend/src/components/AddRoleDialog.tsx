@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogActions,
@@ -11,7 +11,7 @@ import {
 interface AddRoleDialogProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (roleData: { name: string; description: string }) => void;
+  onAdd: (roleData: { name: string; description?: string | null }) => void;
 }
 
 export default function AddRoleDialog({ open, onClose, onAdd }: AddRoleDialogProps) {
@@ -20,7 +20,7 @@ export default function AddRoleDialog({ open, onClose, onAdd }: AddRoleDialogPro
 
   const handleSubmit = () => {
     if (name) {
-      onAdd({ name, description });
+      onAdd({ name, description: description || undefined });
       setName('');
       setDescription('');
     }

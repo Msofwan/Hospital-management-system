@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type { MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Typography,
   Button,
@@ -19,52 +20,12 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import axios from 'axios';
 
+import apiClient from '../api/client';
 import AddRoleDialog from '../components/AddRoleDialog';
 import EditRoleDialog from '../components/EditRoleDialog';
 import ConfirmationDialog from '../components/ConfirmationDialog';
-
-interface Role {
-  id: number;
-  name: string;
-  description: string | null;
-}
-
-const API_BASE_URL = 'http://localhost:8000';
-
-// Axios instance with auth token
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.reload();
-    }
-    return Promise.reject(error);
-  }
-);
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.reload();
-    }
-    return Promise.reject(error);
-  }
-);
+import type { Role } from '../types/hms';
 
 export default function RoleManagement() {
   const [roles, setRoles] = useState<Role[]>([]);
@@ -84,7 +45,7 @@ export default function RoleManagement() {
       setRoles(response.data);
     } catch (err) {
       setError('Failed to fetch roles.');
-      console.error(err);
+      console.error('Failed to fetch roles', err);
     } finally {
       setLoading(false);
     }
@@ -94,44 +55,46 @@ export default function RoleManagement() {
     fetchRoles();
   }, []);
 
-  const handleAddRole = async (newRoleData: { name: string; description: string }) => {
+  const handleAddRole = async (newRoleData: { name: string; description?: string | null }) => {
     try {
       await apiClient.post('/roles/', newRoleData);
-      fetchRoles(); // Refresh the list
+      fetchRoles();
       setIsAddDialogOpen(false);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to add role.');
-      console.error(err);
+    } catch (err) {
+      console.error('Failed to add role', err);
+      setError('Failed to add role.');
     }
   };
 
   const handleUpdateRole = async (updatedRole: Role) => {
     try {
-      await apiClient.put(`/roles/${updatedRole.id}`, updatedRole);
-      fetchRoles(); // Refresh the list
+      await apiClient.put(`/roles/${updatedRole.id}`, {
+        name: updatedRole.name,
+        description: updatedRole.description,
+      });
+      fetchRoles();
       setIsEditDialogOpen(false);
       setSelectedRole(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update role.');
-      console.error(err);
+    } catch (err) {
+      console.error('Failed to update role', err);
+      setError('Failed to update role.');
     }
   };
 
   const handleDeleteRole = async () => {
-    if (selectedRole) {
-      try {
-        await apiClient.delete(`/roles/${selectedRole.id}`);
-        fetchRoles(); // Refresh the list
-        setIsDeleteDialogOpen(false);
-        setSelectedRole(null);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to delete role.');
-        console.error(err);
-      }
+    if (!selectedRole) return;
+    try {
+      await apiClient.delete(`/roles/${selectedRole.id}`);
+      fetchRoles();
+      setIsDeleteDialogOpen(false);
+      setSelectedRole(null);
+    } catch (err) {
+      console.error('Failed to delete role', err);
+      setError('Failed to delete role.');
     }
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, role: Role) => {
+  const handleMenuClick = (event: MouseEvent<HTMLElement>, role: Role) => {
     setAnchorEl(event.currentTarget);
     setSelectedRole(role);
   };
@@ -146,8 +109,8 @@ export default function RoleManagement() {
   };
 
   const handleDeleteClick = () => {
-    setAnchorEl(null); // This closes the little menu
-    setIsDeleteDialogOpen(true); // This opens the confirmation dialog
+    setAnchorEl(null);
+    setIsDeleteDialogOpen(true);
   };
 
   if (loading) {
@@ -180,10 +143,25 @@ export default function RoleManagement() {
               <TableRow key={role.id}>
                 <TableCell>{role.id}</TableCell>
                 <TableCell>{role.name}</TableCell>
-                <TableCell>{role.description}</TableCell>
+                <TableCell>{role.description ?? '—'}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={(event) => handleMenuClick(event, role)}><MoreVertIcon /></IconButton>
-                  <Menu anchorEl={anchorEl} open={openMenu && selectedRole?.id === role.id} onClose={handleMenuClose}>
+                  <IconButton
+                    aria-label={`Manage options for role ${role.name}`}
+                    onClick={(event) => handleMenuClick(event, role)}
+                    id={`role-actions-${role.id}`}
+                    aria-controls={openMenu && selectedRole?.id === role.id ? `role-menu-${role.id}` : undefined}
+                    aria-haspopup="true"
+                    aria-expanded={openMenu && selectedRole?.id === role.id ? 'true' : undefined}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                  <Menu
+                    id={`role-menu-${role.id}`}
+                    anchorEl={anchorEl}
+                    open={openMenu && selectedRole?.id === role.id}
+                    onClose={handleMenuClose}
+                    MenuListProps={{ 'aria-labelledby': `role-actions-${role.id}` }}
+                  >
                     <MenuItem onClick={handleEditClick}><EditIcon sx={{ mr: 1 }} /> Edit</MenuItem>
                     <MenuItem onClick={handleDeleteClick}><DeleteIcon sx={{ mr: 1 }} /> Delete</MenuItem>
                   </Menu>
@@ -196,14 +174,22 @@ export default function RoleManagement() {
 
       <AddRoleDialog open={isAddDialogOpen} onClose={() => setIsAddDialogOpen(false)} onAdd={handleAddRole} />
       {selectedRole && (
-        <EditRoleDialog open={isEditDialogOpen} onClose={() => {setIsEditDialogOpen(false); setSelectedRole(null);}} onUpdate={handleUpdateRole} role={selectedRole} />
+        <EditRoleDialog
+          open={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setSelectedRole(null);
+          }}
+          onUpdate={handleUpdateRole}
+          role={selectedRole}
+        />
       )}
       <ConfirmationDialog
         open={isDeleteDialogOpen}
-        onClose={() => { setIsDeleteDialogOpen(false); setSelectedRole(null); }}
+        onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={handleDeleteRole}
         title="Delete Role"
-        message={`Are you sure you want to delete the role "${selectedRole?.name}"?`}
+        message={`Are you sure you want to delete ${selectedRole?.name}?`}
       />
     </Box>
   );

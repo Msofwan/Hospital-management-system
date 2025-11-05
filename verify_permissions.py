@@ -1,9 +1,8 @@
 
-import asyncio
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
 from backend.db.base import Base
-from backend.models import appointment, bed, dispensation, invoice, medicine, patient, permission, role, role_permission, staff
 
 DATABASE_URL = "postgresql://postgres:mysecretpassword@localhost/postgres"
 

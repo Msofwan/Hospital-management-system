@@ -1,129 +1,141 @@
 # Hospital Management System
 
-This project is a comprehensive Hospital Management System (HMS) designed to streamline hospital operations and improve patient engagement. It is built with a modern, decoupled architecture consisting of a central backend API and two distinct frontend applications: one for patients and one for internal staff.
+Modern, end-to-end hospital management platform featuring a FastAPI backend, an internal operations dashboard, and a public-facing patient portal. Recent work expanded the domain model, implemented public-to-internal appointment workflows, enhanced accessibility, and introduced containerized deployment.
 
 ---
 
-## Architecture Overview
-
-The system is designed as a three-component, service-oriented architecture. This separation of concerns ensures the application is scalable, maintainable, and flexible for future development (e.g., adding a native mobile app).
+## System Architecture
 
 ```
 +--------------------------+      +------------------------+      +--------------------------+
-|                          |      |                        |      |                          |
-|  Public Website          |      |      Backend API       |      |  Internal HMS Dashboard  |
-|  (Next.js / React)       |----->|     (Python/FastAPI)   |----->|  (React / MUI)           |
-|  (Patient-Facing)        |      |                        |      |  (Staff-Facing)          |
-|                          |      |                        |      |                          |
+|  Public Website          | ---> |      Backend API       | ---> |  Internal HMS Dashboard  |
+|  (Next.js, Bootstrap)    |      |  (FastAPI, SQLAlchemy) |      |  (React 19, MUI v7)      |
 +--------------------------+      +-----------+------------+      +--------------------------+
-                                        |
-                                        |
-                                        v
-                                +----------------+
-                                |                |
-                                |   Database     |
-                                |  (PostgreSQL)  |
-                                |                |
-                                +----------------+
+                                       |
+                                       v
+                                 PostgreSQL 15
 ```
+
+The public site captures appointment inquiries and patient portal access requests. The backend orchestrates scheduling, EMR, billing, pharmacy, admissions, and authentication workflows. The internal dashboard provides staff-facing management tools.
+
+---
+
+## Key Capabilities
+
+### Backend (FastAPI / SQLAlchemy)
+- Rich data model including patients, staff, roles & permissions, appointments, admissions, doctor schedules, prescriptions, lab results, medicines, dispensations, invoices, beds, and appointment requests.
+- Appointment intake pipeline with status transitions, decision notes, conversion into scheduled appointments, and handler attribution.
+- Patient portal authentication via short-lived JWT (email + date-of-birth verification).
+- Public API endpoints for doctor directory, availability slot computation (21-day horizon), and appointment request submission with logging.
+- Role-based access control with seeded permissions for Admin, Doctor, Nurse, and Pharmacist personas.
+- Sample data population scripts (`create_samples.py`, `create_admin.py`).
+
+### Internal Dashboard (React 19 + Vite + MUI v7)
+- Shared Axios API client with JWT handling and TypeScript models.
+- Operational modules: Patient Management (EMR viewer with visits, prescriptions, lab results, admissions), Appointment management, Bed management with occupancy tracking, Staff & Role administration, Pharmacy dispensing, Billing, Doctor schedules, and Appointment request triage.
+- Dialog workflows for CRUD operations, visit documentation, prescription & lab result capture, admissions and discharge, plus appointment request approval/rejection.
+- Accessibility improvements: skip-to-content link, `aria-current` navigation state, descriptive aria labels on action menus, keyboard-friendly modals, and consistent focus management.
+
+### Public Website (Next.js 15 + Bootstrap 5)
+- Pages for home, services, doctors, appointment booking, patient portal, and contact.
+- Doctor directory with search, department filters, slot suggestions, and availability highlights.
+- Appointment booking form that suggests provider slots and submits to the public API.
+- Patient portal login form that issues tokens and previews upcoming appointments and invoices.
+- Accessibility enhancements including skip links, proper nav state announcement, and semantic form labelling.
 
 ---
 
 ## Technology Stack
 
-| Component         | Technology                               | Purpose                                                 |
-| ----------------- | ---------------------------------------- | ------------------------------------------------------- |
-| **Backend**       | Python (FastAPI), Uvicorn                | Core business logic, API endpoints, data processing.    |
-| **Database**      | PostgreSQL                               | Secure and reliable storage for all hospital data.      |
-| **Public Frontend** | React (Next.js), Bootstrap CSS           | Fast, SEO-friendly, and responsive patient website.     |
-| **Internal Frontend**| React, Material-UI (MUI)                 | Rich, data-heavy dashboard for internal hospital staff. |
-| **Deployment**    | Docker (recommended)                     | Containerize each service for consistent environments.  |
+| Layer                 | Tech & Libraries                                                                 |
+| --------------------- | -------------------------------------------------------------------------------- |
+| Backend               | FastAPI, SQLAlchemy, PostgreSQL, Pydantic, python-jose, passlib, bcrypt          |
+| Internal Dashboard    | React 19, Vite, TypeScript, MUI 7, Axios, date-fns                               |
+| Public Website        | Next.js 15 (App Router), React 19, Bootstrap 5, Axios                           |
+| DevOps                | Docker, Docker Compose, uvicorn, npm, pytest, ESLint                             |
 
 ---
 
-## Component Breakdown
+## Running with Docker Compose
 
-### 1. Backend (`/backend`)
+The backend and PostgreSQL database can be launched together using Docker Compose.
 
-This is the central engine of the entire system. It handles all data, logic, and security.
+```bash
+# From the repository root
+docker compose build
+docker compose up
+```
 
-*   **Implemented Models:** `Patient`, `Appointment`, `Bed`.
-*   **API:** Exposes a secure RESTful API for the frontend applications to consume.
-*   **To Run:**
-    ```bash
-    cd backend
-    # Set up virtual environment
-    python -m venv venv
-    source venv/bin/activate
-    # Install dependencies
-    pip install -r requirements.txt
-    # Run the server
-    uvicorn main:app --reload
-    ```
+Services:
+- **db** – PostgreSQL 15 with persistent volume (`postgres-data`).
+- **backend** – FastAPI application served via uvicorn, exposed on `http://localhost:8000`.
 
-### 2. Public Frontend (`/public-frontend`)
-
-The public-facing website for patients. It's focused on providing information and easy access to services like appointment booking.
-
-*   **Core Features:** Homepage (scaffolded), Doctor Directory, Department Information, Appointment Booking, Contact/Location.
-*   **To Run:**
-    ```bash
-    cd public-frontend
-    # Install dependencies
-    npm install
-    # Run the development server
-    npm run dev
-    ```
-
-### 3. Internal Frontend (`/internal-frontend`)
-
-A secure and comprehensive dashboard for hospital staff to manage operations.
-
-*   **Implemented Features:** `Patient Management (CRUD)`, `Appointment Management (CRUD)`, `Bed Management`.
-*   **To Run:**
-    ```bash
-    cd internal-frontend
-    # Install dependencies
-    npm install
-    # Run the development server
-    npm run dev
-    ```
+The backend reads `DATABASE_URL` from the environment (set automatically in `docker-compose.yml`).
 
 ---
 
-## Getting Started
+## Local Development
 
-To run the full system locally, follow these steps.
+### Backend (FastAPI)
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate  # On Windows (use `source .venv/bin/activate` on macOS/Linux)
+pip install -r requirements.txt
+export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres  # adjust as needed
+uvicorn main:app --reload
+# API docs: http://localhost:8000/docs
+```
 
-### Prerequisites
+### Internal Dashboard (Vite)
+```bash
+cd internal-frontend
+npm install
+npm run dev  # default: http://localhost:5173
+npm run lint
+npm run build
+```
 
-*   **Node.js** (v18 or later)
-*   **Python** (v3.9 or later)
-*   **Docker** (for running PostgreSQL easily)
+### Public Website (Next.js)
+```bash
+cd public-frontend
+npm install
+npm run dev      # default: http://localhost:3000
+npm run lint
+npm run build && npm run start
+```
 
-### Installation & Setup
+Both frontends expect the backend API to be reachable at `http://localhost:8000` during development; adjust Axios base URLs if needed.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd hospital-management-system
-    ```
+---
 
-2.  **Set up the Database:**
-    *   The easiest way to run PostgreSQL is with Docker.
-    ```bash
-    # This command will start a PostgreSQL container
-    docker run --name hms-postgres -e POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 -d postgres
-    ```
-    *   You will need a `.env` file in the `/backend` directory with the database connection string.
+## Testing & Quality
 
-3.  **Configure and run the Backend API:**
-    *   Navigate to `/backend`, create a virtual environment, install dependencies from `requirements.txt`, and start the server (see instructions above).
+- **Backend**: `python -m pytest` (current suite collects fixtures; expand with unit/integration tests as features grow).
+- **Internal Dashboard**: `npm run lint`, `npm run build`.
+- **Public Website**: `npm run lint`, `npm run build` (static generation).
 
-4.  **Configure and run the Frontend Applications:**
-    *   For both `/public-frontend` and `/internal-frontend`, navigate into the directory, run `npm install` to install dependencies, and then run the development server.
+---
 
-5.  **Access the Applications:**
-    *   **Backend API Docs:** `http://127.0.0.1:8000/docs`
-    *   **Public Website:** `http://localhost:3000`
-    *   **Internal HMS:** `http://localhost:3001` (or as configured)
+## Accessibility Improvements
+
+- Added keyboard-accessible skip links to both internal and public applications.
+- Highlighted active navigation links with `aria-current` attributes and visual indicators.
+- Provided explicit aria labels for action menus and icons (appointment, patient, staff, schedule tables).
+- Ensured modals/forms include descriptive headings, labels, and consistent focus handling.
+- Bootstrap/MUI components configured for semantic HTML structure and responsive layouts.
+
+---
+
+## Repository Structure
+
+```
+backend/               # FastAPI application, SQLAlchemy models, routers, auth, CRUD logic
+internal-frontend/     # Staff dashboard (React + Vite + MUI)
+public-frontend/       # Public Next.js site for patients
+docker-compose.yml     # Backend + PostgreSQL stack
+create_admin.py        # Helper script to bootstrap admin users
+create_samples.py      # Data seeding utility
+```
+
+Use this document as the canonical reference for the current capabilities, frameworks, and operational workflows implemented during this phase of development.

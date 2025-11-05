@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Typography,
   Button,
@@ -20,43 +20,17 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import AddIcon from '@mui/icons-material/Add';
 import { format } from 'date-fns';
-import axios from 'axios';
 
-// Interfaces
-interface Patient {
-  id: number;
-  first_name: string;
-  last_name: string;
-}
-
-interface Invoice {
-  id: number;
-  patient_id: number;
-  amount: number;
-  description: string;
-  date_issued: string;
-  status: string;
-  patient: Patient;
-}
-
-const API_BASE_URL = 'http://localhost:8000';
-
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import apiClient from '../api/client';
+import type { InvoiceDetail, InvoicePayload, Patient } from '../types/hms';
 
 export default function Billing() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState<boolean>(false);
@@ -64,7 +38,7 @@ export default function Billing() {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get<Invoice[]>('/invoices/');
+      const response = await apiClient.get<InvoiceDetail[]>('/invoices/');
       setInvoices(response.data);
     } catch (err) {
       setError('Failed to fetch invoices.');
@@ -78,14 +52,14 @@ export default function Billing() {
     fetchInvoices();
   }, []);
 
-  const handleAddInvoice = async (newInvoiceData: any) => {
+  const handleAddInvoice = async (newInvoiceData: InvoicePayload) => {
     try {
       await apiClient.post('/invoices/', newInvoiceData);
       fetchInvoices();
       setIsAddDialogOpen(false);
     } catch (err) {
       setError('Failed to add invoice.');
-      console.error(err);
+      console.error('Failed to add invoice', err);
     }
   };
 
@@ -95,7 +69,7 @@ export default function Billing() {
       fetchInvoices();
     } catch (err) {
       setError('Failed to update status.');
-      console.error(err);
+      console.error('Failed to update invoice status', err);
     }
   };
 
@@ -136,9 +110,9 @@ export default function Billing() {
                 <TableCell>{invoice.description}</TableCell>
                 <TableCell>{format(new Date(invoice.date_issued), 'PPP')}</TableCell>
                 <TableCell>
-                  <Chip 
-                    label={invoice.status} 
-                    color={invoice.status === 'Paid' ? 'success' : 'warning'} 
+                  <Chip
+                    label={invoice.status}
+                    color={invoice.status === 'Paid' ? 'success' : 'warning'}
                     size="small"
                   />
                 </TableCell>
@@ -160,42 +134,49 @@ export default function Billing() {
   );
 }
 
-// AddInvoiceDialog Component
 interface AddInvoiceDialogProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (invoiceData: any) => void;
+  onAdd: (payload: InvoicePayload) => void;
 }
 
 function AddInvoiceDialog({ open, onClose, onAdd }: AddInvoiceDialogProps) {
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
   const [patientId, setPatientId] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loadingPatients, setLoadingPatients] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setPatientId('');
-      setAmount('');
-      setDescription('');
-      
-      setLoadingPatients(true);
-      apiClient.get<Patient[]>('/patients/')
-        .then(response => setPatients(response.data))
-        .catch(error => console.error("Failed to fetch patients", error))
-        .finally(() => setLoadingPatients(false));
-    }
+    if (!open) return;
+    setLoadingPatients(true);
+    apiClient.get<Patient[]>('/patients/')
+      .then((response) => setPatients(response.data))
+      .catch((error) => console.error('Failed to fetch patients', error))
+      .finally(() => setLoadingPatients(false));
   }, [open]);
 
   const handleSubmit = () => {
-    if (patientId && amount && description) {
-      onAdd({ patient_id: patientId, amount: parseFloat(amount), description });
-    }
+    if (!patientId || !amount || !description) return;
+    const payload: InvoicePayload = {
+      patient_id: Number(patientId),
+      amount: Number(amount),
+      description,
+      status: 'Unpaid',
+      date_issued: new Date().toISOString(),
+    };
+    onAdd(payload);
+  };
+
+  const resetAndClose = () => {
+    setPatientId('');
+    setAmount('');
+    setDescription('');
+    onClose();
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={resetAndClose} fullWidth maxWidth="sm">
       <DialogTitle>Create New Invoice</DialogTitle>
       <DialogContent>
         {loadingPatients ? (
@@ -207,20 +188,27 @@ function AddInvoiceDialog({ open, onClose, onAdd }: AddInvoiceDialogProps) {
               labelId="patient-select-label"
               value={patientId}
               label="Patient"
-              onChange={(e: SelectChangeEvent<number>) => setPatientId(e.target.value as number)}
+              onChange={(event: SelectChangeEvent<number>) => setPatientId(event.target.value as number)}
             >
-              {patients.map(p => (
-                <MenuItem key={p.id} value={p.id}>{`${p.first_name} ${p.last_name}`}</MenuItem>
+              <MenuItem value="" disabled>
+                Select patient
+              </MenuItem>
+              {patients.map((patient) => (
+                <MenuItem key={patient.id} value={patient.id}>
+                  {patient.first_name} {patient.last_name}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
         )}
-        <TextField margin="dense" label="Amount" type="number" fullWidth value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <TextField margin="dense" label="Description" type="text" fullWidth multiline rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <TextField margin="dense" label="Amount" type="number" fullWidth value={amount} onChange={(event) => setAmount(event.target.value)} />
+        <TextField margin="dense" label="Description" type="text" fullWidth multiline rows={3} value={description} onChange={(event) => setDescription(event.target.value)} />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} variant="contained">Create</Button>
+        <Button onClick={resetAndClose}>Cancel</Button>
+        <Button onClick={handleSubmit} variant="contained" disabled={!patientId || !amount || !description}>
+          Create
+        </Button>
       </DialogActions>
     </Dialog>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import {
   Box,
@@ -21,7 +21,8 @@ import HotelIcon from '@mui/icons-material/Hotel';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import SupervisedUserCircleIcon from '@mui/icons-material/SupervisedUserCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { Routes, Route, Link, Navigate } from 'react-router-dom';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
@@ -32,6 +33,8 @@ import Billing from './pages/Billing';
 import StaffManagement from './pages/StaffManagement';
 import RoleManagement from './pages/RoleManagement';
 import Pharmacy from './pages/Pharmacy';
+import DoctorSchedules from './pages/DoctorSchedules';
+import AppointmentRequestsPage from './pages/AppointmentRequests';
 import LocalPharmacyIcon from '@mui/icons-material/LocalPharmacy';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -50,7 +53,9 @@ const allMenuItems = [
   { text: 'Patient Management', icon: <PeopleIcon />, path: '/patients', roles: ['Admin', 'Nurse'] },
   { text: 'Staff Management', icon: <SupervisedUserCircleIcon />, path: '/staff', roles: ['Admin'] },
   { text: 'Role Management', icon: <VpnKeyIcon />, path: '/roles', roles: ['Admin'] },
+  { text: 'Doctor Schedules', icon: <CalendarTodayIcon />, path: '/schedules', roles: ['Admin', 'Doctor'] },
   { text: 'Appointments', icon: <CalendarTodayIcon />, path: '/appointments', roles: ['Admin', 'Doctor'] },
+  { text: 'Appointment Requests', icon: <AssignmentTurnedInIcon />, path: '/appointment-requests', roles: ['Admin', 'Doctor', 'Nurse'] },
   { text: 'Bed Management', icon: <HotelIcon />, path: '/beds', roles: ['Admin', 'Nurse'] },
   { text: 'Billing', icon: <ReceiptIcon />, path: '/billing', roles: ['Admin'] },
   { text: 'Pharmacy', icon: <LocalPharmacyIcon />, path: '/pharmacy', roles: ['Admin', 'Pharmacist'] },
@@ -58,6 +63,7 @@ const allMenuItems = [
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('authToken'));
+  const location = useLocation();
 
   const userRole = useMemo(() => {
     if (!token) return null;
@@ -89,6 +95,31 @@ function App() {
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
+      <Box
+        component="a"
+        href="#main-content"
+        sx={{
+          position: 'absolute',
+          left: -10000,
+          top: 'auto',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          '&:focus': {
+            position: 'fixed',
+            left: 16,
+            top: 16,
+            width: 'auto',
+            height: 'auto',
+            p: 1,
+            bgcolor: 'background.paper',
+            zIndex: (theme) => theme.zIndex.drawer + 2,
+            boxShadow: 4,
+          },
+        }}
+      >
+        Skip to main content
+      </Box>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
@@ -110,26 +141,40 @@ function App() {
         <Toolbar />
         <Box sx={{ overflow: 'auto' }}>
           <List>
-            {filteredMenuItems.map((item) => (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton component={Link} to={item.path}>
+            {filteredMenuItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <ListItem key={item.text} disablePadding>
+                  <ListItemButton
+                    component={Link}
+                    to={item.path}
+                    selected={isActive}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
                   <ListItemIcon>{item.icon}</ListItemIcon>
                   <ListItemText primary={item.text} />
                 </ListItemButton>
-              </ListItem>
-            ))}
+                </ListItem>
+              );
+            })}
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" id="main-content" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/patients" element={<PatientManagement />} />
             <Route path="/appointments" element={<Appointments />} />
+            {(userRole === 'Admin' || userRole === 'Doctor' || userRole === 'Nurse') && (
+              <Route path="/appointment-requests" element={<AppointmentRequestsPage />} />
+            )}
             <Route path="/beds" element={<BedManagement />} />
             <Route path="/billing" element={<Billing />} />
+            {(userRole === 'Admin' || userRole === 'Doctor') && (
+              <Route path="/schedules" element={<DoctorSchedules />} />
+            )}
             {userRole === 'Admin' && (
               <>
                 <Route path="/staff" element={<StaffManagement />} />

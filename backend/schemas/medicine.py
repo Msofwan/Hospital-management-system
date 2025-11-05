@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 # Base schema for medicine data
 class MedicineBase(BaseModel):
     name: str

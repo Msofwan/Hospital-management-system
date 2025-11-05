@@ -1,118 +1,140 @@
-import React, { useState, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  TextField,
   FormControl,
   InputLabel,
-  Select,
   MenuItem,
-  CircularProgress,
-  Box
+  Select,
+  TextField,
 } from '@mui/material';
-import axios from 'axios';
 
-// Define interfaces
-interface Role {
-  id: number;
-  name: string;
-}
+import apiClient from '../api/client';
+import type { Role, StaffFormPayload } from '../types/hms';
 
 interface AddStaffDialogProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (staff: any) => void; // Simplified for this refactor
+  onAdd: (staff: StaffFormPayload) => void;
 }
 
-const apiClient = axios.create({ baseURL: 'http://localhost:8000' });
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 export default function AddStaffDialog({ open, onClose, onAdd }: AddStaffDialogProps) {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [roleId, setRoleId] = useState<number | ''>('');
-  const [email, setEmail] = useState('');
-  const [contactNumber, setContactNumber] = useState('');
-  const [password, setPassword] = useState('');
-  
+  const [formState, setFormState] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    contact_number: '',
+    password: '',
+    role_id: '' as number | '',
+    department: '',
+    specialization: '',
+    license_number: '',
+    employment_type: '',
+  });
   const [roles, setRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      // Reset form
-      setFirstName('');
-      setLastName('');
-      setRoleId('');
-      setEmail('');
-      setContactNumber('');
-      setPassword('');
-      
-      // Fetch roles
-      setLoadingRoles(true);
-      apiClient.get<Role[]>('/roles/')
-        .then(response => {
-          setRoles(response.data);
-        })
-        .catch(error => console.error("Failed to fetch roles", error))
-        .finally(() => setLoadingRoles(false));
-    }
+    if (!open) return;
+    setFormState({
+      first_name: '',
+      last_name: '',
+      email: '',
+      contact_number: '',
+      password: '',
+      role_id: '',
+      department: '',
+      specialization: '',
+      license_number: '',
+      employment_type: '',
+    });
+    loadRoles();
   }, [open]);
 
-  const handleSubmit = () => {
-    if (firstName && lastName && roleId && email && contactNumber && password) {
-      const role = roles.find(r => r.id === roleId);
-      onAdd({
-        first_name: firstName,
-        last_name: lastName,
-        role: role, // Pass the full role object
-        email,
-        contact_number: contactNumber,
-        password
-      });
-      onClose();
+  const loadRoles = async () => {
+    try {
+      setLoadingRoles(true);
+      const response = await apiClient.get<Role[]>('/roles/');
+      setRoles(response.data);
+    } catch (error) {
+      console.error('Failed to fetch roles', error);
+    } finally {
+      setLoadingRoles(false);
     }
   };
 
+  const handleChange = (field: keyof typeof formState) => (event: ChangeEvent<HTMLInputElement>) => {
+    setFormState((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleSubmit = () => {
+    const { first_name, last_name, email, contact_number, password, role_id } = formState;
+    if (!first_name || !last_name || !email || !contact_number || !password || !role_id) return;
+    const payload: StaffFormPayload = {
+      first_name,
+      last_name,
+      email,
+      contact_number,
+      password,
+      role_id,
+      department: formState.department || undefined,
+      specialization: formState.specialization || undefined,
+      license_number: formState.license_number || undefined,
+      employment_type: formState.employment_type || undefined,
+    };
+    onAdd(payload);
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add New Staff Member</DialogTitle>
       <DialogContent>
-        <TextField autoFocus margin="dense" label="First Name" type="text" fullWidth value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        <TextField margin="dense" label="Last Name" type="text" fullWidth value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        <TextField margin="dense" label="Email" type="email" fullWidth value={email} onChange={(e) => setEmail(e.target.value)} />
-        <TextField margin="dense" label="Password" type="password" fullWidth value={password} onChange={(e) => setPassword(e.target.value)} />
-        <TextField margin="dense" label="Contact Number" type="text" fullWidth value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+        <TextField autoFocus margin="dense" label="First Name" fullWidth value={formState.first_name} onChange={handleChange('first_name')} />
+        <TextField margin="dense" label="Last Name" fullWidth value={formState.last_name} onChange={handleChange('last_name')} />
+        <TextField margin="dense" label="Email" type="email" fullWidth value={formState.email} onChange={handleChange('email')} />
+        <TextField margin="dense" label="Password" type="password" fullWidth value={formState.password} onChange={handleChange('password')} />
+        <TextField margin="dense" label="Contact Number" fullWidth value={formState.contact_number} onChange={handleChange('contact_number')} />
+        <TextField margin="dense" label="Department" fullWidth value={formState.department} onChange={handleChange('department')} />
+        <TextField margin="dense" label="Specialization" fullWidth value={formState.specialization} onChange={handleChange('specialization')} />
+        <TextField margin="dense" label="License Number" fullWidth value={formState.license_number} onChange={handleChange('license_number')} />
+        <TextField margin="dense" label="Employment Type" fullWidth value={formState.employment_type} onChange={handleChange('employment_type')} />
         {loadingRoles ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}><CircularProgress /></Box>
+          <Box display="flex" justifyContent="center" my={2}>
+            <CircularProgress size={24} />
+          </Box>
         ) : (
-            <FormControl fullWidth margin="dense">
-                <InputLabel id="role-select-label">Role</InputLabel>
-                <Select
-                labelId="role-select-label"
-                value={roleId}
-                label="Role"
-                onChange={(e) => setRoleId(e.target.value as number)}
-                >
-                {roles.map(role => (
-                    <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
-                ))}
-                </Select>
-            </FormControl>
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="role-select-label">Role</InputLabel>
+            <Select
+              labelId="role-select-label"
+              value={formState.role_id}
+              label="Role"
+              onChange={(event) => setFormState((prev) => ({ ...prev, role_id: event.target.value as number }))}
+            >
+              <MenuItem value="" disabled>
+                Select role
+              </MenuItem>
+              {roles.map((role) => (
+                <MenuItem key={role.id} value={role.id}>
+                  {role.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} variant="contained">Add</Button>
+        <Button onClick={handleSubmit} variant="contained" disabled={!formState.role_id}>
+          Add
+        </Button>
       </DialogActions>
     </Dialog>
   );

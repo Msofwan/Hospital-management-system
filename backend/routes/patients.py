@@ -1,11 +1,11 @@
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import crud
-from ..database import get_db
-from ..schemas.patient import Patient, PatientCreate
 from ..auth import get_current_user, has_permission
+from ..database import get_db
+from ..schemas.patient import Patient, PatientCreate, PatientUpdate
 
 router = APIRouter(
     prefix="/patients",
@@ -14,7 +14,7 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=List[Patient], dependencies=[Depends(has_permission("read_patients"))])
+@router.get("/", response_model=list[Patient], dependencies=[Depends(has_permission("read_patients"))])
 def get_all_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all patients.
@@ -43,7 +43,7 @@ def delete_patient_by_id(patient_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{patient_id}", response_model=Patient, dependencies=[Depends(has_permission("update_patient"))])
-def update_patient_by_id(patient_id: int, patient: PatientCreate, db: Session = Depends(get_db)):
+def update_patient_by_id(patient_id: int, patient: PatientUpdate, db: Session = Depends(get_db)):
     """
     Update a patient by ID.
     """

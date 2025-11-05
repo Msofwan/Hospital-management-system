@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Float, Integer, String
 from sqlalchemy.orm import relationship
 
 from ..db.base import Base
+
 
 class Medicine(Base):
     __tablename__ = "medicines"

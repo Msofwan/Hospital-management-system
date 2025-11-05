@@ -1,9 +1,11 @@
 import asyncio
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from backend.db.base import Base
-from backend.models.role import Role
 from backend.models.permission import Permission
+from backend.models.role import Role
 from backend.models.role_permission import RolePermission
 
 DATABASE_URL = "postgresql://postgres:mysecretpassword@localhost/postgres"
@@ -20,7 +22,13 @@ PERMISSIONS = [
     "create_bed", "read_beds", "update_bed", "delete_bed",
     "create_invoice", "read_invoices", "update_invoice",
     "create_medicine", "read_medicines", "update_medicine", "delete_medicine", "restock_medicine",
-    "create_dispensation", "read_dispensations"
+    "create_dispensation", "read_dispensations",
+    "create_doctor_schedule", "read_doctor_schedules", "update_doctor_schedule", "delete_doctor_schedule",
+    "create_patient_visit", "read_patient_visits", "update_patient_visit", "delete_patient_visit",
+    "create_prescription", "read_prescriptions", "update_prescription", "delete_prescription",
+    "create_lab_result", "read_lab_results", "update_lab_result", "delete_lab_result",
+    "create_admission", "read_admissions", "update_admission", "delete_admission",
+    "read_appointment_requests", "update_appointment_requests", "approve_appointment_requests"
 ]
 
 # Define roles and their associated permissions
@@ -33,24 +41,44 @@ ROLES = {
         "create_bed", "read_beds", "update_bed", "delete_bed",
         "create_invoice", "read_invoices", "update_invoice",
         "create_medicine", "read_medicines", "update_medicine", "delete_medicine", "restock_medicine",
-        "create_dispensation", "read_dispensations"
+        "create_dispensation", "read_dispensations",
+        "create_doctor_schedule", "read_doctor_schedules", "update_doctor_schedule", "delete_doctor_schedule",
+        "create_patient_visit", "read_patient_visits", "update_patient_visit", "delete_patient_visit",
+        "create_prescription", "read_prescriptions", "update_prescription", "delete_prescription",
+        "create_lab_result", "read_lab_results", "update_lab_result", "delete_lab_result",
+        "create_admission", "read_admissions", "update_admission", "delete_admission",
+        "read_appointment_requests", "update_appointment_requests", "approve_appointment_requests"
     ],
     "Doctor": [
         "read_patients",
         "read_appointments", "update_appointment",
         "read_beds",
         "read_medicines",
-        "read_dispensations"
+        "read_dispensations",
+        "create_doctor_schedule", "read_doctor_schedules", "update_doctor_schedule",
+        "create_patient_visit", "read_patient_visits", "update_patient_visit",
+        "create_prescription", "read_prescriptions", "update_prescription",
+        "create_lab_result", "read_lab_results", "update_lab_result",
+        "read_admissions", "update_admission",
+        "read_appointment_requests", "approve_appointment_requests"
     ],
     "Nurse": [
         "read_patients", "update_patient",
         "read_appointments",
         "read_beds", "update_bed",
-        "read_dispensations"
+        "read_dispensations",
+        "read_doctor_schedules",
+        "create_patient_visit", "read_patient_visits", "update_patient_visit",
+        "create_lab_result", "read_lab_results", "update_lab_result",
+        "create_admission", "read_admissions", "update_admission",
+        "read_appointment_requests"
     ],
     "Pharmacist": [
         "read_medicines", "update_medicine", "restock_medicine",
-        "create_dispensation", "read_dispensations"
+        "create_dispensation", "read_dispensations",
+        "read_doctor_schedules",
+        "read_prescriptions", "update_prescription",
+        "read_lab_results"
     ]
 }
 
@@ -94,7 +122,11 @@ async def create_initial_data():
                 db_permission = all_db_permissions[permission_name]
                 
                 # Check if the association already exists
-                existing_link = db.query(RolePermission).filter_by(role_id=db_role.id, permission_id=db_permission.id).first()
+                existing_link = (
+                    db.query(RolePermission)
+                    .filter_by(role_id=db_role.id, permission_id=db_permission.id)
+                    .first()
+                )
                 if not existing_link:
                     link = RolePermission(role_id=db_role.id, permission_id=db_permission.id)
                     db.add(link)

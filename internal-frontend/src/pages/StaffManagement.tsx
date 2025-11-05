@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type { MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Typography,
   Button,
@@ -19,47 +20,12 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import axios from 'axios';
+
+import apiClient from '../api/client';
 import ConfirmationDialog from '../components/ConfirmationDialog';
-// We will create these dialogs next
 import AddStaffDialog from '../components/AddStaffDialog';
 import EditStaffDialog from '../components/EditStaffDialog';
-
-interface Role {
-  id: number;
-  name: string;
-}
-
-interface Staff {
-  id: number;
-  first_name: string;
-  last_name: string;
-  role: Role;
-  email: string;
-  contact_number: string;
-}
-
-const API_BASE_URL = 'http://localhost:8000';
-
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.reload();
-    }
-    return Promise.reject(error);
-  }
-);
+import type { Staff, StaffFormPayload } from '../types/hms';
 
 export default function StaffManagement() {
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -89,14 +55,18 @@ export default function StaffManagement() {
     fetchStaff();
   }, []);
 
-  const handleAddStaff = async (newStaffData: Omit<Staff, 'id'>) => {
+  useEffect(() => {
+    if (currentStaff) {
+      const refreshed = staff.find((member) => member.id === currentStaff.id);
+      if (refreshed) {
+        setCurrentStaff(refreshed);
+      }
+    }
+  }, [staff, currentStaff]);
+
+  const handleAddStaff = async (newStaffData: StaffFormPayload) => {
     try {
-      // The backend expects role_id, not a role object.
-      const payload = {
-        ...newStaffData,
-        role_id: newStaffData.role.id,
-      };
-      await apiClient.post(`/staff/`, payload);
+      await apiClient.post(`/staff/`, newStaffData);
       fetchStaff();
     } catch (err) {
       setError('Failed to add staff member.');
@@ -104,15 +74,10 @@ export default function StaffManagement() {
     }
   };
 
-  const handleEditStaff = async (updatedStaffData: Staff) => {
+  const handleEditStaff = async (updatedStaffData: StaffFormPayload) => {
     if (!currentStaff) return;
     try {
-      // The backend expects role_id, not a role object.
-      const payload = {
-        ...updatedStaffData,
-        role_id: updatedStaffData.role.id,
-      };
-      await apiClient.put(`/staff/${currentStaff.id}`, payload);
+      await apiClient.put(`/staff/${currentStaff.id}`, updatedStaffData);
       fetchStaff();
     } catch (err) {
       setError('Failed to update staff member.');
@@ -134,14 +99,13 @@ export default function StaffManagement() {
     }
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, staffMember: Staff) => {
+  const handleMenuClick = (event: MouseEvent<HTMLElement>, staffMember: Staff) => {
     setAnchorEl(event.currentTarget);
     setCurrentStaff(staffMember);
   };
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    setCurrentStaff(null);
   };
 
   const handleEditClick = () => {
@@ -150,8 +114,8 @@ export default function StaffManagement() {
   };
 
   const handleDeleteClick = () => {
-    setAnchorEl(null); // This closes the little menu
-    setIsDeleteDialogOpen(true); // This opens the confirmation dialog
+    setAnchorEl(null);
+    setIsDeleteDialogOpen(true);
   };
 
   if (loading) {
@@ -178,6 +142,8 @@ export default function StaffManagement() {
               <TableCell>Role</TableCell>
               <TableCell>Email</TableCell>
               <TableCell>Contact Number</TableCell>
+              <TableCell>Department</TableCell>
+              <TableCell>Specialization</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -189,9 +155,26 @@ export default function StaffManagement() {
                 <TableCell>{staffMember.role ? staffMember.role.name : ''}</TableCell>
                 <TableCell>{staffMember.email}</TableCell>
                 <TableCell>{staffMember.contact_number}</TableCell>
+                <TableCell>{staffMember.department ?? '—'}</TableCell>
+                <TableCell>{staffMember.specialization ?? '—'}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={(event) => handleMenuClick(event, staffMember)}><MoreVertIcon /></IconButton>
-                  <Menu anchorEl={anchorEl} open={openMenu && currentStaff?.id === staffMember.id} onClose={handleMenuClose}>
+                  <IconButton
+                    aria-label={`Manage options for staff member ${staffMember.first_name} ${staffMember.last_name}`}
+                    onClick={(event) => handleMenuClick(event, staffMember)}
+                    id={`staff-actions-${staffMember.id}`}
+                    aria-controls={openMenu && currentStaff?.id === staffMember.id ? `staff-menu-${staffMember.id}` : undefined}
+                    aria-haspopup="true"
+                    aria-expanded={openMenu && currentStaff?.id === staffMember.id ? 'true' : undefined}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                  <Menu
+                    id={`staff-menu-${staffMember.id}`}
+                    anchorEl={anchorEl}
+                    open={openMenu && currentStaff?.id === staffMember.id}
+                    onClose={handleMenuClose}
+                    MenuListProps={{ 'aria-labelledby': `staff-actions-${staffMember.id}` }}
+                  >
                     <MenuItem onClick={handleEditClick}><EditIcon sx={{ mr: 1 }} /> Edit</MenuItem>
                     <MenuItem onClick={handleDeleteClick}><DeleteIcon sx={{ mr: 1 }} /> Delete</MenuItem>
                   </Menu>
@@ -204,7 +187,15 @@ export default function StaffManagement() {
 
       <AddStaffDialog open={isAddDialogOpen} onClose={() => setIsAddDialogOpen(false)} onAdd={handleAddStaff} />
       {currentStaff && (
-        <EditStaffDialog open={isEditDialogOpen} onClose={() => setIsEditDialogOpen(false)} onEdit={handleEditStaff} staffMember={currentStaff} />
+        <EditStaffDialog
+          open={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setCurrentStaff(null);
+          }}
+          onEdit={handleEditStaff}
+          staffMember={currentStaff}
+        />
       )}
       <ConfirmationDialog
         open={isDeleteDialogOpen}

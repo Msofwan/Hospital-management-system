@@ -1,18 +1,20 @@
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import crud
+from ..auth import get_current_user, has_permission
 from ..database import get_db
 from ..schemas.bed import Bed, BedCreate, BedUpdate
 
 router = APIRouter(
     prefix="/beds",
     tags=["Beds"],
+    dependencies=[Depends(get_current_user)],
 )
 
 
-@router.get("/", response_model=List[Bed])
+@router.get("/", response_model=list[Bed], dependencies=[Depends(has_permission("read_beds"))])
 def get_all_beds(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all beds.
@@ -21,7 +23,7 @@ def get_all_beds(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     return beds
 
 
-@router.post("/", response_model=Bed)
+@router.post("/", response_model=Bed, dependencies=[Depends(has_permission("create_bed"))])
 def create_new_bed(bed: BedCreate, db: Session = Depends(get_db)):
     """
     Create a new bed.
@@ -29,7 +31,7 @@ def create_new_bed(bed: BedCreate, db: Session = Depends(get_db)):
     return crud.create_bed(db=db, bed=bed)
 
 
-@router.put("/{bed_id}", response_model=Bed)
+@router.put("/{bed_id}", response_model=Bed, dependencies=[Depends(has_permission("update_bed"))])
 def update_bed_by_id(bed_id: int, bed: BedUpdate, db: Session = Depends(get_db)):
     """
     Update a bed by ID, used for assigning or discharging a patient.
@@ -40,7 +42,7 @@ def update_bed_by_id(bed_id: int, bed: BedUpdate, db: Session = Depends(get_db))
     return db_bed
 
 
-@router.delete("/{bed_id}", response_model=Bed)
+@router.delete("/{bed_id}", response_model=Bed, dependencies=[Depends(has_permission("delete_bed"))])
 def delete_bed_by_id(bed_id: int, db: Session = Depends(get_db)):
     """
     Delete a bed by ID.

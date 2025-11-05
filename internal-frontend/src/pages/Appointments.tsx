@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type { MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Typography,
   Button,
@@ -19,66 +20,39 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import axios from 'axios';
 import { format } from 'date-fns';
+
+import apiClient from '../api/client';
 import AddAppointmentDialog from '../components/AddAppointmentDialog';
 import EditAppointmentDialog from '../components/EditAppointmentDialog';
 import ConfirmationDialog from '../components/ConfirmationDialog';
-
-interface Patient {
-  id: number;
-  first_name: string;
-  last_name: string;
-}
-
-interface Appointment {
-  id: number;
-  patient_id: number;
-  doctor_name: string;
-  appointment_date: string; // ISO string
-  reason: string;
-  status: string;
-  patient: Patient; // Nested patient object
-}
+import type { AppointmentDetail, AppointmentPayload } from '../types/hms';
 
 export default function Appointments() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState<boolean>(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
-  const [currentAppointment, setCurrentAppointment] = useState<Appointment | null>(null);
+  const [currentAppointment, setCurrentAppointment] = useState<AppointmentDetail | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openMenu = Boolean(anchorEl);
 
-  const API_BASE_URL = 'http://localhost:8000'; // Your FastAPI backend URL
-
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.reload();
+  const doctorLabelFor = (appointment?: AppointmentDetail | null) => {
+    if (!appointment) return 'assigned provider';
+    const label = appointment.doctor_name?.trim();
+    if (label) return label;
+    if (appointment.provider) {
+      return `${appointment.provider.first_name} ${appointment.provider.last_name}`;
     }
-    return Promise.reject(error);
-  }
-);
+    return 'assigned provider';
+  };
 
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get<Appointment[]>(`/appointments/`);
+      const response = await apiClient.get<AppointmentDetail[]>(`/appointments/`);
       setAppointments(response.data);
     } catch (err) {
       setError('Failed to fetch appointments.');
@@ -92,7 +66,7 @@ apiClient.interceptors.response.use(
     fetchAppointments();
   }, []);
 
-  const handleAddAppointment = async (newAppointmentData: Omit<Appointment, 'id' | 'patient'>) => {
+  const handleAddAppointment = async (newAppointmentData: AppointmentPayload) => {
     try {
       await apiClient.post(`/appointments/`, newAppointmentData);
       fetchAppointments(); // Refresh the list
@@ -102,7 +76,7 @@ apiClient.interceptors.response.use(
     }
   };
 
-  const handleEditAppointment = async (updatedAppointmentData: Omit<Appointment, 'patient'>) => {
+  const handleEditAppointment = async (updatedAppointmentData: AppointmentPayload) => {
     if (!currentAppointment) return;
     try {
       await apiClient.put(`/appointments/${currentAppointment.id}`, updatedAppointmentData);
@@ -127,14 +101,13 @@ apiClient.interceptors.response.use(
     }
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, appointment: Appointment) => {
+  const handleMenuClick = (event: MouseEvent<HTMLElement>, appointment: AppointmentDetail) => {
     setAnchorEl(event.currentTarget);
     setCurrentAppointment(appointment);
   };
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    setCurrentAppointment(null);
   };
 
   const handleEditClick = () => {
@@ -192,17 +165,20 @@ apiClient.interceptors.response.use(
             </TableRow>
           </TableHead>
           <TableBody>
-            {appointments.map((appointment) => (
-              <TableRow key={appointment.id}>
-                <TableCell>{appointment.id}</TableCell>
-                <TableCell>{`${appointment.patient.first_name} ${appointment.patient.last_name}`}</TableCell>
-                <TableCell>{appointment.doctor_name}</TableCell>
-                <TableCell>{format(new Date(appointment.appointment_date), 'PPP p')}</TableCell>
-                <TableCell>{appointment.reason}</TableCell>
-                <TableCell>{appointment.status}</TableCell>
-                <TableCell align="right">
+            {appointments.map((appointment) => {
+              const doctorLabel = appointment.doctor_name?.trim()
+                || (appointment.provider ? `${appointment.provider.first_name} ${appointment.provider.last_name}` : '—');
+              return (
+                <TableRow key={appointment.id}>
+                  <TableCell>{appointment.id}</TableCell>
+                  <TableCell>{`${appointment.patient.first_name} ${appointment.patient.last_name}`}</TableCell>
+                  <TableCell>{doctorLabel}</TableCell>
+                  <TableCell>{format(new Date(appointment.appointment_date), 'PPP p')}</TableCell>
+                  <TableCell>{appointment.reason}</TableCell>
+                  <TableCell>{appointment.status}</TableCell>
+                  <TableCell align="right">
                   <IconButton
-                    aria-label="more"
+                    aria-label={`Manage options for appointment ${appointment.id}`}
                     id={`long-button-${appointment.id}`}
                     aria-controls={openMenu ? `long-menu-${appointment.id}` : undefined}
                     aria-expanded={openMenu ? 'true' : undefined}
@@ -234,8 +210,9 @@ apiClient.interceptors.response.use(
                     </MenuItem>
                   </Menu>
                 </TableCell>
-              </TableRow>
-            ))}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
@@ -248,17 +225,23 @@ apiClient.interceptors.response.use(
       {currentAppointment && (
         <EditAppointmentDialog
           open={isEditDialogOpen}
-          onClose={() => setIsEditDialogOpen(false)}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setCurrentAppointment(null);
+          }}
           onEdit={handleEditAppointment}
           appointment={currentAppointment}
         />
       )}
       <ConfirmationDialog
         open={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setCurrentAppointment(null);
+        }}
         onConfirm={handleDeleteAppointment}
         title="Delete Appointment"
-        message={`Are you sure you want to delete the appointment for ${currentAppointment?.patient.first_name} ${currentAppointment?.patient.last_name} with Dr. ${currentAppointment?.doctor_name}?`}
+        message={`Are you sure you want to delete the appointment for ${currentAppointment?.patient.first_name} ${currentAppointment?.patient.last_name} with ${doctorLabelFor(currentAppointment)}?`}
       />
     </Box>
   );

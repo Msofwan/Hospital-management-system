@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Table, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String
+
 from ..db.base import Base
+
 
 class Permission(Base):
     __tablename__ = "permissions"

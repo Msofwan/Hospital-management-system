@@ -1,11 +1,11 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, models
-from ..database import get_db
-from ..schemas.staff import Staff, StaffCreate
+from .. import crud
 from ..auth import get_current_user, has_permission
+from ..database import get_db
+from ..schemas.staff import Staff, StaffCreate, StaffUpdate
 
 router = APIRouter(
     prefix="/staff",
@@ -13,7 +13,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)] # Protect all routes in this router
 )
 
-@router.get("/", response_model=List[Staff], dependencies=[Depends(has_permission("read_staff"))])
+@router.get("/", response_model=list[Staff], dependencies=[Depends(has_permission("read_staff"))])
 def get_all_staff(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all staff members.
@@ -35,7 +35,7 @@ def create_new_staff(staff: StaffCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{staff_id}", response_model=Staff, dependencies=[Depends(has_permission("update_staff"))])
-def update_staff_by_id(staff_id: int, staff: StaffCreate, db: Session = Depends(get_db)):
+def update_staff_by_id(staff_id: int, staff: StaffUpdate, db: Session = Depends(get_db)):
     """
     Update a staff member by ID.
     """

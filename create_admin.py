@@ -1,8 +1,7 @@
 
-import asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.database import Base
+
 from backend.models.role import Role
 from backend.models.staff import Staff
 from backend.security import get_password_hash

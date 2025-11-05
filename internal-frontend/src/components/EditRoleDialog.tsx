@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogActions,
@@ -8,11 +8,7 @@ import {
   Button,
 } from '@mui/material';
 
-interface Role {
-  id: number;
-  name: string;
-  description: string | null;
-}
+import type { Role } from '../types/hms';
 
 interface EditRoleDialogProps {
   open: boolean;
@@ -34,7 +30,7 @@ export default function EditRoleDialog({ open, onClose, onUpdate, role }: EditRo
 
   const handleSubmit = () => {
     if (name && role) {
-      onUpdate({ ...role, name, description });
+      onUpdate({ ...role, name, description: description || null });
     }
   };
 

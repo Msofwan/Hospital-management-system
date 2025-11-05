@@ -1,11 +1,11 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, models
+from .. import crud
+from ..auth import get_current_user, has_permission
 from ..database import get_db
 from ..schemas.role import Role, RoleCreate, RoleUpdate
-from ..auth import get_current_user, has_permission
 
 router = APIRouter(
     prefix="/roles",
@@ -13,7 +13,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
-@router.get("/", response_model=List[Role], dependencies=[Depends(has_permission("read_roles"))])
+@router.get("/", response_model=list[Role], dependencies=[Depends(has_permission("read_roles"))])
 def get_all_roles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve all roles.

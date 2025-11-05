@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Typography,
   Button,
-  Grid,
   Card,
   CardContent,
   CardActions,
@@ -18,48 +17,14 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Stack,
 } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import { Hotel, Accessible } from '@mui/icons-material';
 import AddIcon from '@mui/icons-material/Add';
-import axios from 'axios';
 
-interface Patient {
-  id: number;
-  first_name: string;
-  last_name: string;
-}
-
-interface Bed {
-  id: number;
-  bed_number: string;
-  room_number: string;
-  is_occupied: boolean;
-  patient_id: number | null;
-  patient: Patient | null;
-}
-
-const API_BASE_URL = 'http://localhost:8000';
-
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.reload();
-    }
-    return Promise.reject(error);
-  }
-);
+import apiClient from '../api/client';
+import type { Bed, Patient, StaffSummary } from '../types/hms';
 
 export default function BedManagement() {
   const [beds, setBeds] = useState<Bed[]>([]);
@@ -69,9 +34,12 @@ export default function BedManagement() {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState<boolean>(false);
   const [selectedBed, setSelectedBed] = useState<Bed | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<StaffSummary[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<number | ''>('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<number | ''>('');
+  const [admissionReason, setAdmissionReason] = useState<string>('');
 
-  const fetchBeds = async () => {
+  const fetchBeds = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiClient.get<Bed[]>(`/beds/`);
@@ -82,29 +50,34 @@ export default function BedManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async () => {
     try {
-      const response = await apiClient.get<Patient[]>(`/patients/`);
-      // Filter out patients who are already in a bed
-      const assignedPatientIds = beds.map(b => b.patient_id).filter(id => id !== null);
-      const unassignedPatients = response.data.filter(p => !assignedPatientIds.includes(p.id));
+      const [patientsResponse, staffResponse] = await Promise.all([
+        apiClient.get<Patient[]>(`/patients/`),
+        apiClient.get<StaffSummary[]>(`/staff/`),
+      ]);
+      const assignedPatientIds = beds
+        .map((b) => (b.is_occupied ? b.patient_id : null))
+        .filter((id): id is number => id !== null);
+      const unassignedPatients = patientsResponse.data.filter((p) => !assignedPatientIds.includes(p.id));
       setPatients(unassignedPatients);
+      setDoctors(staffResponse.data.filter((staff) => staff.role?.name === 'Doctor'));
     } catch (err) {
       console.error('Failed to fetch patients', err);
     }
-  };
+  }, [beds]);
 
   useEffect(() => {
     fetchBeds();
-  }, []);
+  }, [fetchBeds]);
 
   useEffect(() => {
     if (isAssignDialogOpen) {
       fetchPatients();
     }
-  }, [isAssignDialogOpen, beds]);
+  }, [isAssignDialogOpen, fetchPatients]);
 
   const handleAddBed = async (bedData: { room_number: string; bed_number: string }) => {
     try {
@@ -119,14 +92,20 @@ export default function BedManagement() {
   const handleAssignPatient = async () => {
     if (!selectedBed || !selectedPatientId) return;
     try {
-      await apiClient.put(`/beds/${selectedBed.id}`, {
-        is_occupied: true,
+      await apiClient.post('/admissions/', {
         patient_id: selectedPatientId,
+        bed_id: selectedBed.id,
+        attending_staff_id: selectedDoctorId || undefined,
+        reason: admissionReason || undefined,
+        admitted_at: new Date().toISOString(),
+        status: 'Admitted',
       });
       fetchBeds();
       setIsAssignDialogOpen(false);
       setSelectedBed(null);
       setSelectedPatientId('');
+      setSelectedDoctorId('');
+      setAdmissionReason('');
     } catch (err) {
       console.error('Failed to assign patient', err);
     }
@@ -135,10 +114,18 @@ export default function BedManagement() {
   const handleDischarge = async (bed: Bed) => {
     if (!bed.patient_id) return;
     try {
-      await apiClient.put(`/beds/${bed.id}`, {
-        is_occupied: false,
-        patient_id: null,
-      });
+      const activeAdmission = bed.admissions?.find((admission) => admission.status !== 'Discharged');
+      if (activeAdmission) {
+        await apiClient.put(`/admissions/${activeAdmission.id}`, {
+          status: 'Discharged',
+          discharged_at: new Date().toISOString(),
+        });
+      } else {
+        await apiClient.put(`/beds/${bed.id}`, {
+          is_occupied: false,
+          patient_id: null,
+        });
+      }
       fetchBeds();
     } catch (err) {
       console.error('Failed to discharge patient', err);
@@ -162,7 +149,7 @@ export default function BedManagement() {
 
       <Grid container spacing={3}>
         {beds.map((bed) => (
-          <Grid item key={bed.id} xs={12} sm={6} md={4} lg={3}>
+          <Grid key={bed.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
             <Card sx={{ backgroundColor: bed.is_occupied ? '#fff0f0' : '#f0fff0' }}>
               <CardContent>
                 <Typography variant="h6" component="div">Room {bed.room_number} - Bed {bed.bed_number}</Typography>
@@ -174,9 +161,21 @@ export default function BedManagement() {
                   sx={{ mt: 1 }}
                 />
                 {bed.is_occupied && bed.patient && (
-                  <Typography sx={{ mt: 2 }}>
-                    Patient: {bed.patient.first_name} {bed.patient.last_name}
-                  </Typography>
+                  <Stack spacing={0.5} sx={{ mt: 2 }}>
+                    <Typography>Patient: {bed.patient.first_name} {bed.patient.last_name}</Typography>
+                    {bed.admissions?.length ? (
+                      (() => {
+                        const activeAdmission = bed.admissions.find((admission) => admission.status !== 'Discharged');
+                        if (!activeAdmission) return null;
+                        return (
+                          <Typography variant="body2">
+                            Admitted: {new Date(activeAdmission.admitted_at).toLocaleString()}
+                            {activeAdmission.attending_provider ? ` · Attending: ${activeAdmission.attending_provider.first_name} ${activeAdmission.attending_provider.last_name}` : ''}
+                          </Typography>
+                        );
+                      })()
+                    ) : null}
+                  </Stack>
                 )}
               </CardContent>
               <CardActions>
@@ -195,7 +194,7 @@ export default function BedManagement() {
       <AddBedDialog open={isAddBedDialogOpen} onClose={() => setIsAddBedDialogOpen(false)} onAdd={handleAddBed} />
 
       {/* Assign Patient Dialog */}
-      <Dialog open={isAssignDialogOpen} onClose={() => { setIsAssignDialogOpen(false); setSelectedBed(null); }}>
+      <Dialog open={isAssignDialogOpen} onClose={() => { setIsAssignDialogOpen(false); setSelectedBed(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>Assign Patient to Bed</DialogTitle>
         <DialogContent>
           <FormControl fullWidth margin="dense">
@@ -213,10 +212,35 @@ export default function BedManagement() {
               ))}
             </Select>
           </FormControl>
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="doctor-select-label">Attending Doctor</InputLabel>
+            <Select
+              labelId="doctor-select-label"
+              value={selectedDoctorId}
+              label="Attending Doctor"
+              onChange={(e) => setSelectedDoctorId(e.target.value as number)}
+            >
+              <MenuItem value="">
+                <em>Not assigned</em>
+              </MenuItem>
+              {doctors.map((doctor) => (
+                <MenuItem key={doctor.id} value={doctor.id}>
+                  {doctor.first_name} {doctor.last_name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            margin="dense"
+            label="Admission Reason"
+            fullWidth
+            value={admissionReason}
+            onChange={(e) => setAdmissionReason(e.target.value)}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setIsAssignDialogOpen(false); setSelectedBed(null); }}>Cancel</Button>
-          <Button onClick={handleAssignPatient} variant="contained">Assign</Button>
+          <Button onClick={handleAssignPatient} variant="contained" disabled={!selectedPatientId}>Assign</Button>
         </DialogActions>
       </Dialog>
     </Box>

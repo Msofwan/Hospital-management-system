@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from ..db.base import Base
+
 
 class Bed(Base):
     __tablename__ = "beds"
@@ -13,3 +14,4 @@ class Bed(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, unique=True)
 
     patient = relationship("Patient", back_populates="bed")
+    admissions = relationship("Admission", back_populates="bed")

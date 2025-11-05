@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import type { ChangeEvent, SyntheticEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Typography,
   Button,
@@ -11,7 +12,6 @@ import {
   Paper,
   CircularProgress,
   Box,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -22,51 +22,36 @@ import {
   Select,
   MenuItem,
   Tabs,
-  Tab
+  Tab,
 } from '@mui/material';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import AddIcon from '@mui/icons-material/Add';
 import { format } from 'date-fns';
-import axios from 'axios';
+
+import apiClient from '../api/client';
+import type { Medicine, Patient, PatientVisit, Prescription, StaffSummary } from '../types/hms';
 
 // Interfaces
-interface Patient {
+type PatientOption = {
   id: number;
   first_name: string;
   last_name: string;
-}
-
-interface Medicine {
-  id: number;
-  name: string;
-  manufacturer: string;
-  stock_quantity: number;
-  unit_price: number;
-}
+};
 
 interface Dispensation {
-    id: number;
-    patient: Patient;
-    medicine: Medicine;
-    quantity_dispensed: number;
-    date_dispensed: string;
+  id: number;
+  patient: PatientOption;
+  medicine: Medicine;
+  staff: StaffSummary;
+  quantity_dispensed: number;
+  date_dispensed: string;
+  notes?: string | null;
+  prescription?: Prescription | null;
 }
-
-const API_BASE_URL = 'http://localhost:8000';
-
-const apiClient = axios.create({ baseURL: API_BASE_URL });
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 
 export default function Pharmacy() {
   const [tabIndex, setTabIndex] = useState(0);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: SyntheticEvent, newValue: number) => {
     setTabIndex(newValue);
   };
 
@@ -88,6 +73,13 @@ export default function Pharmacy() {
 }
 
 // InventoryTab Component
+type NewMedicinePayload = {
+  name: string;
+  manufacturer: string;
+  stock_quantity: number;
+  unit_price: number;
+};
+
 function InventoryTab() {
     const [medicines, setMedicines] = useState<Medicine[]>([]);
     const [loading, setLoading] = useState(true);
@@ -101,6 +93,7 @@ function InventoryTab() {
             setMedicines(response.data);
         } catch (err) {
             setError('Failed to fetch medicines.');
+            console.error('Failed to fetch medicines', err);
         } finally {
             setLoading(false);
         }
@@ -110,13 +103,14 @@ function InventoryTab() {
         fetchMedicines();
     }, []);
 
-    const handleAddMedicine = async (newMedicineData: any) => {
+    const handleAddMedicine = async (newMedicineData: NewMedicinePayload) => {
         try {
             await apiClient.post('/medicines/', newMedicineData);
             fetchMedicines();
             setIsAddDialogOpen(false);
         } catch (err) {
             setError('Failed to add medicine.');
+            console.error('Failed to add medicine', err);
         }
     };
 
@@ -157,66 +151,185 @@ function InventoryTab() {
 
 // DispenseTab Component
 function DispenseTab() {
-    const [patients, setPatients] = useState<Patient[]>([]);
-    const [medicines, setMedicines] = useState<Medicine[]>([]);
-    const [selectedPatient, setSelectedPatient] = useState<number | ''>('');
-    const [selectedMedicine, setSelectedMedicine] = useState<number | ''>('');
-    const [quantity, setQuantity] = useState<number | ''>('');
-    const [notes, setNotes] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
+  const [patients, setPatients] = useState<PatientOption[]>([]);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<number | ''>('');
+  const [selectedMedicine, setSelectedMedicine] = useState<number | ''>('');
+  const [quantity, setQuantity] = useState<number | ''>('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [selectedPrescription, setSelectedPrescription] = useState<number | ''>('');
+  const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
 
-    useEffect(() => {
-        apiClient.get('/patients/').then(res => setPatients(res.data));
-        apiClient.get('/medicines/').then(res => setMedicines(res.data));
-    }, []);
+  useEffect(() => {
+    apiClient.get<Patient[]>('/patients/').then((res) => {
+      const patientOptions = res.data.map((patient) => ({
+        id: patient.id,
+        first_name: patient.first_name,
+        last_name: patient.last_name,
+      }));
+      setPatients(patientOptions);
+    });
+    apiClient.get<Medicine[]>('/medicines/').then((res) => setMedicines(res.data));
+  }, []);
 
-    const handleDispense = async () => {
-        if (!selectedPatient || !selectedMedicine || !quantity) {
-            setError('Please fill all fields.');
-            return;
-        }
-        try {
-            await apiClient.post('/dispensations/', {
-                patient_id: selectedPatient,
-                medicine_id: selectedMedicine,
-                quantity_dispensed: quantity,
-                notes
-            });
-            setSuccess('Medicine dispensed successfully!');
-            setError(null);
-            // Reset form
-            setSelectedPatient('');
-            setSelectedMedicine('');
-            setQuantity('');
-            setNotes('');
-        } catch (err) {
-            setError('Failed to dispense medicine. Check stock.');
-            setSuccess(null);
-        }
+  useEffect(() => {
+    if (!selectedPatient) {
+      setPrescriptions([]);
+      setSelectedPrescription('');
+      return;
+    }
+    const fetchPrescriptions = async () => {
+      try {
+        setLoadingPrescriptions(true);
+        const visitsResponse = await apiClient.get<PatientVisit[]>('/patient-visits/', {
+          params: { patient_id: selectedPatient },
+        });
+        const prescriptionsForPatient = visitsResponse.data.flatMap((visit) => visit.prescriptions ?? []);
+        setPrescriptions(prescriptionsForPatient);
+        setSelectedPrescription('');
+      } catch (err) {
+        console.error('Failed to fetch prescriptions for patient', err);
+        setPrescriptions([]);
+      } finally {
+        setLoadingPrescriptions(false);
+      }
     };
+    fetchPrescriptions();
+  }, [selectedPatient]);
 
-    return (
-        <Box sx={{ pt: 2, maxWidth: 500 }}>
-            <FormControl fullWidth margin="normal">
-                <InputLabel>Patient</InputLabel>
-                <Select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value as number)}>
-                    {patients.map(p => <MenuItem key={p.id} value={p.id}>{p.first_name} {p.last_name}</MenuItem>)}
-                </Select>
-            </FormControl>
-            <FormControl fullWidth margin="normal">
-                <InputLabel>Medicine</InputLabel>
-                <Select value={selectedMedicine} onChange={(e) => setSelectedMedicine(e.target.value as number)}>
-                    {medicines.map(m => <MenuItem key={m.id} value={m.id}>{m.name} (Stock: {m.stock_quantity})</MenuItem>)}
-                </Select>
-            </FormControl>
-            <TextField fullWidth margin="normal" label="Quantity" type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
-            <TextField fullWidth margin="normal" label="Notes" multiline rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <Button variant="contained" onClick={handleDispense} sx={{ mt: 2 }}>Dispense</Button>
-            {error && <Typography color="error" sx={{ mt: 2 }}>{error}</Typography>}
-            {success && <Typography color="success.main" sx={{ mt: 2 }}>{success}</Typography>}
-        </Box>
-    );
+  const handleQuantityChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setQuantity(value ? Number(value) : '');
+  };
+
+  const handleDispense = async () => {
+    if (!selectedPatient || !selectedMedicine || !quantity) {
+      setError('Please fill all required fields.');
+      return;
+    }
+    try {
+      await apiClient.post('/dispensations/', {
+        patient_id: selectedPatient,
+        medicine_id: selectedMedicine,
+        quantity_dispensed: quantity,
+        notes: notes || undefined,
+        prescription_id: selectedPrescription || undefined,
+      });
+      setSuccess('Medicine dispensed successfully!');
+      setError(null);
+      setSelectedPatient('');
+      setSelectedMedicine('');
+      setQuantity('');
+      setNotes('');
+      setSelectedPrescription('');
+    } catch (err) {
+      console.error('Failed to dispense medicine', err);
+      setError('Failed to dispense medicine. Check stock levels.');
+      setSuccess(null);
+    }
+  };
+
+  const selectedPrescriptionDetails = useMemo(() => {
+    if (!selectedPrescription) return null;
+    return prescriptions.find((prescription) => prescription.id === selectedPrescription) ?? null;
+  }, [selectedPrescription, prescriptions]);
+
+  return (
+    <Box sx={{ pt: 2, maxWidth: 520 }}>
+      <FormControl fullWidth margin="normal">
+        <InputLabel>Patient</InputLabel>
+        <Select
+          value={selectedPatient}
+          label="Patient"
+          onChange={(event) => setSelectedPatient(event.target.value as number)}
+        >
+          <MenuItem value="" disabled>
+            Select patient
+          </MenuItem>
+          {patients.map((patient) => (
+            <MenuItem key={patient.id} value={patient.id}>
+              {patient.first_name} {patient.last_name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl fullWidth margin="normal">
+        <InputLabel>Medicine</InputLabel>
+        <Select
+          value={selectedMedicine}
+          label="Medicine"
+          onChange={(event) => setSelectedMedicine(event.target.value as number)}
+        >
+          <MenuItem value="" disabled>
+            Select medicine
+          </MenuItem>
+          {medicines.map((medicine) => (
+            <MenuItem key={medicine.id} value={medicine.id}>
+              {medicine.name} (Stock: {medicine.stock_quantity})
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl fullWidth margin="normal" disabled={!selectedPatient || loadingPrescriptions}>
+        <InputLabel>Prescription</InputLabel>
+        <Select
+          value={selectedPrescription}
+          label="Prescription"
+          onChange={(event) => setSelectedPrescription(event.target.value as number)}
+        >
+          <MenuItem value="">
+            <em>None</em>
+          </MenuItem>
+          {prescriptions.map((prescription) => (
+            <MenuItem key={prescription.id} value={prescription.id}>
+              {prescription.medicine_name} — {prescription.dosage ?? 'dosage N/A'}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      {selectedPrescriptionDetails && (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          Instructions: {selectedPrescriptionDetails.instructions ?? '—'}
+        </Typography>
+      )}
+
+      <TextField
+        fullWidth
+        margin="normal"
+        label="Quantity"
+        type="number"
+        value={quantity}
+        onChange={handleQuantityChange}
+      />
+      <TextField
+        fullWidth
+        margin="normal"
+        label="Notes"
+        multiline
+        rows={3}
+        value={notes}
+        onChange={(event) => setNotes(event.target.value)}
+      />
+      <Button variant="contained" onClick={handleDispense} sx={{ mt: 2 }}>
+        Dispense
+      </Button>
+      {error && (
+        <Typography color="error" sx={{ mt: 2 }}>
+          {error}
+        </Typography>
+      )}
+      {success && (
+        <Typography color="success.main" sx={{ mt: 2 }}>
+          {success}
+        </Typography>
+      )}
+    </Box>
+  );
 }
 
 // HistoryTab Component
@@ -243,7 +356,10 @@ function HistoryTab() {
                         <TableCell>Patient</TableCell>
                         <TableCell>Medicine</TableCell>
                         <TableCell>Quantity</TableCell>
+                        <TableCell>Prescription</TableCell>
+                        <TableCell>Dispensed By</TableCell>
                         <TableCell>Date</TableCell>
+                        <TableCell>Notes</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
@@ -252,7 +368,10 @@ function HistoryTab() {
                             <TableCell>{d.patient.first_name} {d.patient.last_name}</TableCell>
                             <TableCell>{d.medicine.name}</TableCell>
                             <TableCell>{d.quantity_dispensed}</TableCell>
+                            <TableCell>{d.prescription ? d.prescription.medicine_name : '—'}</TableCell>
+                            <TableCell>{d.staff ? `${d.staff.first_name} ${d.staff.last_name}` : '—'}</TableCell>
                             <TableCell>{format(new Date(d.date_dispensed), 'PPP p')}</TableCell>
+                            <TableCell>{d.notes ?? '—'}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
@@ -265,7 +384,7 @@ function HistoryTab() {
 interface AddMedicineDialogProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (data: any) => void;
+  onAdd: (data: NewMedicinePayload) => void;
 }
 
 function AddMedicineDialog({ open, onClose, onAdd }: AddMedicineDialogProps) {
@@ -274,8 +393,29 @@ function AddMedicineDialog({ open, onClose, onAdd }: AddMedicineDialogProps) {
     const [stock, setStock] = useState<number | ''>('');
     const [price, setPrice] = useState<number | ''>('');
 
+    useEffect(() => {
+      if (!open) {
+        setName('');
+        setManufacturer('');
+        setStock('');
+        setPrice('');
+      }
+    }, [open]);
+
     const handleSubmit = () => {
-        onAdd({ name, manufacturer, stock_quantity: stock, unit_price: price });
+        if (!name || !manufacturer || stock === '' || price === '') {
+          return;
+        }
+        onAdd({
+          name,
+          manufacturer,
+          stock_quantity: Number(stock),
+          unit_price: Number(price),
+        });
+        setName('');
+        setManufacturer('');
+        setStock('');
+        setPrice('');
     };
 
     return (
@@ -284,12 +424,28 @@ function AddMedicineDialog({ open, onClose, onAdd }: AddMedicineDialogProps) {
             <DialogContent>
                 <TextField autoFocus margin="dense" label="Name" fullWidth value={name} onChange={e => setName(e.target.value)} />
                 <TextField margin="dense" label="Manufacturer" fullWidth value={manufacturer} onChange={e => setManufacturer(e.target.value)} />
-                <TextField margin="dense" label="Initial Stock" type="number" fullWidth value={stock} onChange={e => setStock(Number(e.target.value))} />
-                <TextField margin="dense" label="Unit Price" type="number" fullWidth value={price} onChange={e => setPrice(Number(e.target.value))} />
+                <TextField
+                  margin="dense"
+                  label="Initial Stock"
+                  type="number"
+                  fullWidth
+                  value={stock}
+                  onChange={e => setStock(e.target.value ? Number(e.target.value) : '')}
+                />
+                <TextField
+                  margin="dense"
+                  label="Unit Price"
+                  type="number"
+                  fullWidth
+                  value={price}
+                  onChange={e => setPrice(e.target.value ? Number(e.target.value) : '')}
+                />
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>
-                <Button onClick={handleSubmit}>Add</Button>
+                <Button onClick={handleSubmit} disabled={!name || !manufacturer || stock === '' || price === ''}>
+                  Add
+                </Button>
             </DialogActions>
         </Dialog>
     );

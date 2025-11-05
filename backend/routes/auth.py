@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from .. import crud
-from ..auth import create_access_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
+from ..auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, verify_password
 from ..database import get_db
 
 router = APIRouter(

@@ -1,8 +1,13 @@
+import os
+
+from dotenv import load_dotenv
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# TODO: Move this to a .env file for security
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:mysecretpassword@localhost/postgres"
+load_dotenv()
+
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:mysecretpassword@localhost/postgres")
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 

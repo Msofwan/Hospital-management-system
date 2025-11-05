@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import type { FormEvent } from 'react';
+import { useState } from 'react';
 import {
   Container,
   Box,
@@ -23,7 +24,7 @@ export default function LoginPage({ onLoginSuccess }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -46,9 +47,9 @@ export default function LoginPage({ onLoginSuccess }: LoginProps) {
       if (response.data.access_token) {
         onLoginSuccess(response.data.access_token);
       }
-    } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.detail) {
-        setError(err.response.data.detail);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.detail) {
+        setError(err.response.data.detail as string);
       } else {
         setError('An unexpected error occurred. Please try again.');
       }

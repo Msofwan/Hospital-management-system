@@ -1,14 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 
-from . import crud, models
-from .database import engine, get_db
+from . import crud, models, schemas  # noqa: F401 - ensure schemas forward refs are resolved
+from .database import engine
 from .db.base import Base
-from .models import appointment, bed, dispensation, invoice, medicine, patient, permission, role, role_permission, staff
-from .routes import patients, appointments, beds, staff, auth, roles, invoices, medicines, dispensations
-from .schemas.staff import StaffCreate
-from .schemas.role import RoleCreate
+from .models import staff as models_staff  # noqa: F401  # ensure model registration
+from .routes import (
+    admissions,
+    appointment_requests,
+    appointments,
+    auth,
+    beds,
+    dispensations,
+    doctor_schedules,
+    invoices,
+    lab_results,
+    medicines,
+    patient_portal,
+    patient_visits,
+    patients,
+    prescriptions,
+    public,
+    roles,
+    staff,
+)
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -41,6 +56,14 @@ app.include_router(staff.router)
 app.include_router(invoices.router)
 app.include_router(medicines.router)
 app.include_router(dispensations.router)
+app.include_router(doctor_schedules.router)
+app.include_router(patient_visits.router)
+app.include_router(prescriptions.router)
+app.include_router(lab_results.router)
+app.include_router(admissions.router)
+app.include_router(appointment_requests.router)
+app.include_router(public.router)
+app.include_router(patient_portal.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

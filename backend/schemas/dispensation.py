@@ -1,15 +1,17 @@
-from pydantic import BaseModel
-import datetime
+from __future__ import annotations
 
-from .staff import Staff
-from .patient import Patient
-from .medicine import Medicine
+import datetime
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel
+
 
 # Base schema for dispensation data
 class DispensationBase(BaseModel):
     patient_id: int
     medicine_id: int
     quantity_dispensed: int
+    prescription_id: int | None = None
     notes: str | None = None
 
 # Schema for creating a new dispensation
@@ -24,6 +26,14 @@ class Dispensation(DispensationBase):
     staff: Staff
     patient: Patient
     medicine: Medicine
+    prescription: Prescription | None = None
 
     class Config:
         from_attributes = True
+
+
+if TYPE_CHECKING:
+    from .medicine import Medicine
+    from .patient import Patient
+    from .prescription import Prescription
+    from .staff import Staff
